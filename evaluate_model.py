@@ -162,7 +162,7 @@ class ModelEvaluatorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("モデル評価ツール - Komonjyo Project")
-        self.root.geometry("1200x800")
+        self.root.geometry("1200x1100")
         self.root.minsize(900, 600)
         
         # 変数初期化
@@ -177,6 +177,8 @@ class ModelEvaluatorApp:
         self.use_ignore_var = tk.BooleanVar(value=True)  # 除外領域を使用するかどうか
         self.results = []
         self.is_evaluating = False
+        # New variable to select model architecture
+        self.model_type = tk.StringVar(value="Unet (smp)")
         
         # プロジェクトディレクトリ
         self.project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -266,6 +268,13 @@ class ModelEvaluatorApp:
         
         model_btn = ttk.Button(model_frame, text="参照", command=self.browse_model, style='Dark.TButton')
         model_btn.pack(side=tk.RIGHT, padx=5, pady=5)
+
+        # Model type selection (Unet variants)
+        type_frame = ttk.LabelFrame(parent, text="モデルタイプ", style='Dark.TLabelframe')
+        type_frame.pack(fill=tk.X, pady=5)
+        type_options = ["Unet (smp)", "Unet + scSE"]
+        type_combo = ttk.Combobox(type_frame, textvariable=self.model_type, values=type_options, state='readonly', width=30)
+        type_combo.pack(fill=tk.X, padx=5, pady=5)
         
         # テスト画像フォルダ
         image_frame = ttk.LabelFrame(parent, text="テスト画像フォルダ", style='Dark.TLabelframe')
@@ -486,10 +495,18 @@ class ModelEvaluatorApp:
         if not model_path or not os.path.exists(model_path):
             raise FileNotFoundError("モデルファイルが見つかりません")
         
-        self.model = smp.Unet("resnet34", in_channels=3, classes=1).to(self.device)
+        # Instantiate model based on selected type
+        selected_type = self.model_type.get()
+        if selected_type == "Unet (smp)":
+            self.model = smp.Unet("resnet34", in_channels=3, classes=1).to(self.device)
+        elif selected_type == "Unet + scSE":
+            self.model = smp.Unet("resnet34", in_channels=3, classes=1, decoder_attention_type="scse").to(self.device)
+        else:
+            # Fallback to plain Unet
+            self.model = smp.Unet("resnet34", in_channels=3, classes=1).to(self.device)
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
-        self.log(f"モデル読み込み完了: {os.path.basename(model_path)}")
+        self.log(f"モデル読み込み完了 ({selected_type}): {os.path.basename(model_path)}")
     
     def safe_cv2_imread(self, image_path):
         """Unicode対応の画像読み込み"""
