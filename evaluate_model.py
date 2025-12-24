@@ -31,7 +31,18 @@ def setup_cuda_for_exe():
 setup_cuda_for_exe()
 
 import torch
-import segmentation_models_pytorch as smp
+try:
+    import segmentation_models_pytorch as smp
+except NameError as e:
+    # 一部の環境（PyInstallerでのパッケージ化時など）で
+    # 依存ライブラリ内部で 'name' が未定義エラーになる場合があるための回避策
+    if "name 'name' is not defined" in str(e):
+        import builtins
+        builtins.name = None
+        import segmentation_models_pytorch as smp
+    else:
+        raise e
+
 from PIL import Image, ImageTk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -161,7 +172,7 @@ class ModelEvaluatorApp:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("モデル評価ツール - Komonjyo Project")
+        self.root.title("モデル評価ツール Ver.1.2 - Komonjyo Project")
         self.root.geometry("1200x1100")
         self.root.minsize(900, 600)
         
@@ -180,8 +191,8 @@ class ModelEvaluatorApp:
         # New variable to select model architecture
         self.model_type = tk.StringVar(value="Unet (smp)")
         
-        # プロジェクトディレクトリ
-        self.project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # プロジェクトディレクトリ（現在はルートにあるため dirname(__file__) で取得）
+        self.project_dir = os.path.dirname(os.path.abspath(__file__))
         
         # スタイル設定
         self.setup_styles()

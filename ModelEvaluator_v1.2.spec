@@ -112,7 +112,7 @@ exe = EXE(
     a.scripts,
     [],  # onefileではなくonedirなのでここは空
     exclude_binaries=True,  # バイナリはCOLLECTで収集
-    name='ModelEvaluator_v1.0',
+    name='ModelEvaluator_v1.2',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -134,7 +134,5 @@ coll = COLLECT(
     strip=False,
     upx=False,  # CUDA DLLは圧縮しない方が安全
     upx_exclude=[],
-    name='ModelEvaluator_v1.0',
+    name='ModelEvaluator_v1.2',
 )
-
-
