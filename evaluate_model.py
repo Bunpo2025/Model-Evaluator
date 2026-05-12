@@ -172,7 +172,7 @@ class ModelEvaluatorApp:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("モデル評価ツール Ver.1.2 - Komonjyo Project")
+        self.root.title("モデル評価ツール Ver.1.3 - Komonjyo Project")
         self.root.geometry("1200x1100")
         self.root.minsize(900, 600)
         
@@ -506,18 +506,72 @@ class ModelEvaluatorApp:
         if not model_path or not os.path.exists(model_path):
             raise FileNotFoundError("モデルファイルが見つかりません")
         
-        # Instantiate model based on selected type
-        selected_type = self.model_type.get()
-        if selected_type == "Unet (smp)":
-            self.model = smp.Unet("resnet34", in_channels=3, classes=1).to(self.device)
-        elif selected_type == "Unet + scSE":
-            self.model = smp.Unet("resnet34", in_channels=3, classes=1, decoder_attention_type="scse").to(self.device)
+        checkpoint = torch.load(model_path, map_location=self.device)
+        
+        state_dict = None
+        training_config = None
+        if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+            state_dict = checkpoint['state_dict']
+            training_config = checkpoint.get('training_config', None)
+            epoch_info = f" (エポック: {checkpoint.get('epoch', 'N/A')})" if 'epoch' in checkpoint else ""
+            self.log(f"チェックポイント読み込み: {os.path.basename(model_path)}{epoch_info}")
+            if training_config:
+                self.log(f"training_config: {training_config}")
         else:
-            # Fallback to plain Unet
-            self.model = smp.Unet("resnet34", in_channels=3, classes=1).to(self.device)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            state_dict = checkpoint
+        
+        selected_type = self.model_type.get()
+        encoder_name = "resnet34"
+        decoder_attention_type = None
+        
+        if training_config and isinstance(training_config, dict):
+            encoder_name = training_config.get('encoder_name', training_config.get('encoder', encoder_name))
+            decoder_attention_type = training_config.get('decoder_attention_type', None)
+            if decoder_attention_type:
+                self.log(f"自動検出: encoder={encoder_name}, attention={decoder_attention_type}")
+            else:
+                self.log(f"自動検出: encoder={encoder_name}")
+        else:
+            if selected_type == "Unet + scSE":
+                decoder_attention_type = "scse"
+        
+        has_scse_keys = any('scse' in k.lower() or 'attention' in k.lower() for k in state_dict.keys())
+        if has_scse_keys and decoder_attention_type is None:
+            decoder_attention_type = "scse"
+            self.log("state_dictからscSE attention を検出しました")
+        
+        try:
+            self.model = smp.Unet(
+                encoder_name,
+                in_channels=3,
+                classes=1,
+                decoder_attention_type=decoder_attention_type,
+                encoder_weights=None,
+            ).to(self.device)
+        except Exception as e:
+            self.log(f"モデル構築エラー: {e}")
+            raise
+        
+        try:
+            self.model.load_state_dict(state_dict, strict=True)
+        except RuntimeError as e:
+            err_msg = str(e)
+            self.log("strict=Trueでの読み込みに失敗。詳細を確認します...")
+            short_err = err_msg[:500] + ('...' if len(err_msg) > 500 else '')
+            self.log(short_err)
+            
+            try:
+                missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
+                if missing:
+                    self.log(f"Missing keys数: {len(missing)} 例: {missing[:3]}")
+                if unexpected:
+                    self.log(f"Unexpected keys数: {len(unexpected)} 例: {unexpected[:3]}")
+                self.log("⚠️ strict=Falseで読み込みました。評価結果は不正確になる可能性があります。")
+            except Exception as e2:
+                raise RuntimeError(f"モデルの読み込みに失敗しました:\n{err_msg}") from e2
+        
         self.model.eval()
-        self.log(f"モデル読み込み完了 ({selected_type}): {os.path.basename(model_path)}")
+        self.log(f"モデル読み込み完了: {os.path.basename(model_path)}")
     
     def safe_cv2_imread(self, image_path):
         """Unicode対応の画像読み込み"""
